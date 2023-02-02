@@ -1,18 +1,13 @@
-if (NOT CLANG_FORMAT)
-    if (DEFINED ENV{CLANG_FORMAT})
-        set (CLANG_FORMAT_TMP $ENV{CLANG_FORMAT})
-    else (NOT DEFINED ENV{CLANG_FORMAT})
-        set (CLANG_FORMAT_TMP clang-format-6.0)
-    endif (DEFINED ENV{CLANG_FORMAT})
+# attempt to find the binary if user did not specify
+find_program(CLANG_FORMAT
+        NAMES clang-format clang-format-12
+        HINTS ${BUSTUB_CLANG_SEARCH_PATH})
 
-    # figure out which version of clang-format we're using
-    execute_process (COMMAND ${CLANG_FORMAT_TMP} --version RESULT_VARIABLE CLANG_FORMAT_RESULT OUTPUT_VARIABLE CLANG_FORMAT_VERSION)
-    if (${CLANG_FORMAT_RESULT} EQUAL 0)
-        string (REGEX MATCH "version [0-9]" CLANG_FORMAT_VERSION ${CLANG_FORMAT_VERSION})
-        message (STATUS "Found clang-format " ${CLANG_FORMAT_VERSION})
-        set(CLANG_FORMAT ${CLANG_FORMAT_TMP} CACHE STRING "clang-format executable name")
-    endif (${CLANG_FORMAT_RESULT} EQUAL 0)
-endif (NOT CLANG_FORMAT)
+if ("${CLANG_FORMAT}" STREQUAL "CLANG_FORMAT_BIN-NOTFOUND")
+    message(WARNING "couldn't find clang-format.")
+else ()
+    message(STATUS "found clang-format at ${CLANG_FORMAT_BIN}")
+endif ()
 
 if (DEFINED CLANG_FORMAT)
     file (GLOB_RECURSE ALL_CC_FILES *.cc)
