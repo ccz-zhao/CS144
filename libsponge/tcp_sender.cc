@@ -26,19 +26,26 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
 uint64_t TCPSender::bytes_in_flight() const { return _outbound_size; }
 
 void TCPSender::fill_window() {
+    TCPSegment seg;
+    if (_fin_ready) {
+        return;
+    }
+    if (!_syn_ready) {
+        seg.header().syn = true;
+        _send_tcp_segment(seg);
+        _syn_ready = true;
+        return;
+    }
     size_t curr_window_size = (_last_window_size == 0) ? 1 : _last_window_size;
-    while (curr_window_size > _outbound_size) {
-        TCPSegment seg;
-        // seqno
-        seg.header().seqno = next_seqno();
 
-        // syn
-        if (!_syn_ready) {
-            seg.header().syn = true;
-            _syn_ready = true;
-        }
+    if (stream_in().eof() && curr_window_size > _outbound_size) {
+        seg.header().fin = true;
+        _send_tcp_segment(seg);
+        _fin_ready = true;
+        return;
+    }
 
-        // payload
+    while (curr_window_size > _outbound_size && !stream_in().buffer_empty()) {
         size_t payload_size =
             std::min(TCPConfig::MAX_PAYLOAD_SIZE, curr_window_size - _outbound_size - seg.header().syn);
         std::string payload = stream_in().read(payload_size);
@@ -49,20 +56,7 @@ void TCPSender::fill_window() {
             seg.header().fin = true;
             _fin_ready = true;
         }
-
-        const auto seg_len = seg.length_in_sequence_space();
-        if (seg_len == 0) {
-            break;
-        }
-        _outbound_size += seg_len;
-        _next_seqno += seg_len;
-
-        _segments_out.push(seg);
-        _outbound_seg.push(seg);
-
-        if (seg.header().fin) {
-            break;
-        }
+        _send_tcp_segment(seg);
     }
 }
 
@@ -91,10 +85,14 @@ void TCPSender::ack_received(const WrappingInt32 ackno, const uint16_t window_si
     _consecutive_retransmit_nums = 0;
     _last_window_size = window_size;
     fill_window();
+    _timer_on = _outbound_size > 0;
 }
 
 //! \param[in] ms_since_last_tick the number of milliseconds since the last call to this method
 void TCPSender::tick(const size_t ms_since_last_tick) {
+    if (!_timer_on) {
+        return;
+    }
     _ms_since_last_tick += ms_since_last_tick;
     if (!_outbound_seg.empty() && _ms_since_last_tick >= _current_retransmission_timeout) {
         auto &seg = _outbound_seg.front();
@@ -109,4 +107,22 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
 
 unsigned int TCPSender::consecutive_retransmissions() const { return _consecutive_retransmit_nums; }
 
-void TCPSender::send_empty_segment() {}
+void TCPSender::send_empty_segment() {
+    TCPSegment seg;
+    seg.header().seqno = next_seqno();
+    _segments_out.push(seg);
+}
+
+
+void TCPSender::_send_tcp_segment(TCPSegment& seg) {
+    seg.header().seqno = next_seqno();
+    _segments_out.push(seg);
+    _outbound_seg.push(seg);
+    const auto seg_len = seg.length_in_sequence_space();
+    _outbound_size += seg_len;
+    _next_seqno += seg_len;
+    if (!_timer_on) {
+        _timer_on = true;
+        _ms_since_last_tick = 0;
+    }
+}

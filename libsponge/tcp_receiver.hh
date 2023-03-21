@@ -19,6 +19,7 @@ class TCPReceiver {
 
     //! The maximum number of bytes we'll store.
     size_t _capacity;
+    bool _fin_set{false};
 
     WrappingInt32 _isn{0};
     std::optional<WrappingInt32> _ackno{std::nullopt};

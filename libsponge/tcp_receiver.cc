@@ -1,7 +1,5 @@
 #include "tcp_receiver.hh"
 
-#include <iostream>
-
 // Dummy implementation of a TCP receiver
 
 // For Lab 2, please replace with a real implementation that passes the
@@ -34,8 +32,9 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
     _ackno = _ackno.value() + (stream_out().bytes_written() + 1 - abs_seqno);
 
     // FIN_RECV
-    if (stream_out().input_ended()) {
+    if (!_fin_set && _reassembler.empty() && stream_out().input_ended()) {
         _ackno = _ackno.value() + 1;
+        _fin_set = true;
     }
 }
 

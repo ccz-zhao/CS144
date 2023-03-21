@@ -40,6 +40,9 @@ class TCPSender {
     uint16_t _consecutive_retransmit_nums{0};
     bool _syn_ready{false};
     bool _fin_ready{false};
+    bool _timer_on {false};
+
+    void _send_tcp_segment(TCPSegment& seg);
 
   public:
     //! Initialize a TCPSender
